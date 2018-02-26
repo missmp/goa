@@ -10,6 +10,7 @@ import (
 
 	"github.com/goadesign/goa/design"
 	"github.com/goadesign/goa/dslengine"
+	"github.com/serenize/snaker"
 )
 
 // TransformMapKey is the name of the metadata used to specify the key for mapping fields when
@@ -146,23 +147,30 @@ func attributeTags(parent, att *design.AttributeDefinition, name string, private
 		i++
 	}
 	sort.Strings(keys)
-	for _, key := range keys {
-		val := att.Metadata[key]
-		if strings.HasPrefix(key, "struct:tag:") {
-			name := key[11:]
-			value := strings.Join(val, ",")
-			elems = append(elems, fmt.Sprintf("%s:\"%s\"", name, value))
-		}
-	}
-	if len(elems) > 0 {
-		return " `" + strings.Join(elems, " ") + "`"
-	}
-	// Default algorithm
 	var omit string
 	if private || (!parent.IsRequired(name) && !parent.HasDefaultValue(name)) {
 		omit = ",omitempty"
 	}
-	return fmt.Sprintf(" `form:\"%s%s\" json:\"%s%s\" xml:\"%s%s\"`", name, omit, name, omit, name, omit)
+	defaultTags := fmt.Sprintf(" form:\"%s%s\" json:\"%s%s\" xml:\"%s%s\"", name, omit, name, omit, name, omit)
+	if _, ok := att.Metadata["struct:tag:db"]; !ok {
+		defaultTags = fmt.Sprintf("db:\"%s%s\"", snaker.CamelToSnake(name), omit) + defaultTags
+	}
+	for _, key := range keys {
+		val := att.Metadata[key]
+		if strings.HasPrefix(key, "struct:tag:") {
+			keyName := key[11:]
+			if keyName == "db" {
+				val[0] = snaker.CamelToSnake(val[0])
+			}
+			value := strings.Join(val, ",")
+			elems = append(elems, fmt.Sprintf("%s:\"%s\"", keyName, value))
+		}
+	}
+	if len(elems) > 0 {
+		return " `" + strings.Join(elems, " ") + defaultTags + "`"
+	}
+	// Default algorithm
+	return fmt.Sprintf(" `%s`", defaultTags)
 }
 
 // GoTypeRef returns the Go code that refers to the Go type which matches the given data type
